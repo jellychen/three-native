@@ -1,0 +1,177 @@
+# -------------------------
+# OS / Editor
+# -------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# -------------------------
+# Logs
+# -------------------------
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# -------------------------
+# Environment
+# -------------------------
+.env
+.env.*
+!.env.example
+
+# -------------------------
+# Node / Web / Vite / Webpack
+# -------------------------
+node_modules/
+dist/
+build/
+.cache/
+.parcel-cache/
+.vite/
+.next/
+.nuxt/
+out/
+coverage/
+
+*.tsbuildinfo
+
+# -------------------------
+# xmake
+# -------------------------
+.xmake/
+build/
+bin/
+obj/
+
+# -------------------------
+# C / C++ build outputs
+# -------------------------
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+
+*.gcda
+*.gcno
+*.gcov
+
+# -------------------------
+# CMake / Ninja
+# -------------------------
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+build.ninja
+.ninja_deps
+.ninja_log
+
+# -------------------------
+# Xcode / macOS build
+# -------------------------
+DerivedData/
+*.xcworkspace/
+*.xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/
+*.mode1v3
+*.mode2v3
+*.pbxuser
+
+# -------------------------
+# Assets generated during tests
+# -------------------------
+output/
+outputs/
+export/
+exports/
+screenshots/
+snapshots/
+renders/
+generated/
+tmp/
+temp/
+
+*.obj
+*.mtl
+*.ply
+*.stl
+*.glb
+*.gltf
+*.fbx
+*.usd
+*.usdz
+
+# 如果 assets/models 是项目必需资源，不要忽略整个 assets/
+# 只忽略临时导出的模型：
+*_out.obj
+*_debug.obj
+*_generated.obj
+*_test.obj
+
+# -------------------------
+# Images / render cache
+# -------------------------
+*.hdr.cache
+*.ktx2.cache
+*.basis.cache
+
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# -------------------------
+# WASM / Emscripten
+# -------------------------
+*.wasm
+*.wasm.map
+*.mem
+*.symbols
+*.worker.js
+
+# -------------------------
+# WebGPU / shader generated artifacts
+# -------------------------
+*.spv
+*.spirv
+*.metal
+*.air
+*.metallib
+*.wgsl.tmp
+shader-cache/
+pipeline-cache/
+
+# -------------------------
+# Package manager lock exceptions
+# -------------------------
+# 通常 lock 文件建议提交
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock

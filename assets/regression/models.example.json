@@ -1,0 +1,25 @@
+{
+  "models": [
+    "DamagedHelmet.glb",
+    "BoomBox.glb",
+    "Lantern.glb",
+    "Fox.glb",
+    "CesiumMan.glb",
+    "RobotExpressive.glb"
+  ],
+  "frames": 60,
+  "width": 1280,
+  "height": 720,
+  "render": true,
+  "screenshots": true,
+  "outputDir": "regression_out",
+  "reportJson": "regression_out/report.json",
+  "reportMarkdown": "regression_out/report.md",
+  "checkExternalFiles": true,
+  "enableAnimation": true,
+  "enableSkinning": true,
+  "enableMorphTargets": true,
+  "enableTextures": true,
+  "enableShadows": true,
+  "continueOnError": true
+}
