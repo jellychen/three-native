@@ -1,79 +1,79 @@
 local examples = {
-    "00_clear_screen",
-    "01_basic_primitives",
-    "03_pbr_lights",
-    "04_fatline",
-    "05_skinning",
-    "06_physical_transmission",
-    "07_transmission_render_target",
-    "08_macos_glfw_native_test",
-    "09_pbr_envmap",
-    "10_pmrem_lut",
-    "11_material_geometry_matrix",
-    "12_shadow_map",
-    "13_v2_0_threejs_stack",
-    "14_cache_dashed_texture_transform",
-    "15_skinning_animation_test",
-    "16_pbr_material_gallery",
-    "18_morph_targets_test",
-    "20_postprocessing_stack",
-    "21_v3_3_runtime_cache",
-    "22_multi_light_shadow_test",
-    "23_moving_lights_test",
-    "24_light_falloff_spot_test",
-    "25_standard_physical_pmrem_shadow_lab",
-    "26_physical_material_parity_lab",
-    "27_shadow_completeness_lab",
-    "28_hdr_pmrem_pipeline",
-    "29_pmrem_roughness_lod_lab",
-    "31_standard_material_channel_lab",
-    "32_renderer_architecture_lab",
-    "33_pmrem_hdr_ibl",
-    "34_standard_material_parity_lab",
-    "35_light_system_parity_lab",
-    "36_shadow_map_parity_lab",
-    "37_physical_material_parity_lab",
-    "39_animation_mixer_parity_lab",
-    "40_morph_target_parity_lab",
-    "41_line_points_helpers_parity_lab",
-    "43_performance_cache_large_scene",
-    "44_gpu_instancing_lab",
-    "45_groups_multimaterial_drawrange",
-    "46_transparent_transmissive_queue",
-    "49_ktx2_transcoder_viewer",
-    "50_pmrem_precision_lab",
-    "51_shader_chunk_system_lab",
-    "52_webglrenderer_state_cache_lab",
-    "54_directional_shadow_only_lab",
-    "55_spot_shadow_only_lab",
-    "56_pbr_pmrem_specular_restore",
-    "57_furnace_test",
-    "58_equirect_background",
-    "59_helpers",
-    "60_clipping",
-    "61_rectarealight",
-    "62_pbr_comprehensive"
+    "00-clear-screen",
+    "01-basic-primitives",
+    "03-pbr-lights",
+    "04-fatline",
+    "05-skinning",
+    "06-physical-transmission",
+    "07-transmission-render-target",
+    "08-macos-glfw-native-test",
+    "09-pbr-envmap",
+    "10-pmrem-lut",
+    "11-material-geometry-matrix",
+    "12-shadow-map",
+    "13-v2-0-threejs-stack",
+    "14-cache-dashed-texture-transform",
+    "15-skinning-animation-test",
+    "16-pbr-material-gallery",
+    "18-morph-targets-test",
+    "20-postprocessing-stack",
+    "21-v3-3-runtime-cache",
+    "22-multi-light-shadow-test",
+    "23-moving-lights-test",
+    "24-light-falloff-spot-test",
+    "25-standard-physical-pmrem-shadow-lab",
+    "26-physical-material-parity-lab",
+    "27-shadow-completeness-lab",
+    "28-hdr-pmrem-pipeline",
+    "29-pmrem-roughness-lod-lab",
+    "31-standard-material-channel-lab",
+    "32-renderer-architecture-lab",
+    "33-pmrem-hdr-ibl",
+    "34-standard-material-parity-lab",
+    "35-light-system-parity-lab",
+    "36-shadow-map-parity-lab",
+    "37-physical-material-parity-lab",
+    "39-animation-mixer-parity-lab",
+    "40-morph-target-parity-lab",
+    "41-line-points-helpers-parity-lab",
+    "43-performance-cache-large-scene",
+    "44-gpu-instancing-lab",
+    "45-groups-multimaterial-drawrange",
+    "46-transparent-transmissive-queue",
+    "49-ktx2-transcoder-viewer",
+    "50-pmrem-precision-lab",
+    "51-shader-chunk-system-lab",
+    "52-webglrenderer-state-cache-lab",
+    "54-directional-shadow-only-lab",
+    "55-spot-shadow-only-lab",
+    "56-pbr-pmrem-specular-restore",
+    "57-furnace-test",
+    "58-equirect-background",
+    "59-helpers",
+    "60-clipping",
+    "61-rectarealight",
+    "62-pbr-comprehensive"
 }
 
 if has_config("use_angle") then
-    table.insert(examples, "08_glfw_angle_renderer_test")
+    table.insert(examples, "08-glfw-angle-renderer-test")
 end
 
 if has_config("enable_assimp") then
-    table.insert(examples, "02_assimp_viewer")
-    table.insert(examples, "17_assimp_multi_format_viewer")
-    table.insert(examples, "19_gltf_validation_suite")
-    table.insert(examples, "30_gltf_material_animation_validation")
-    table.insert(examples, "38_asset_import_parity_lab")
-    table.insert(examples, "47_regression_scene_runner")
-    table.insert(examples, "48_gltf_extensions_texture_transform")
-    table.insert(examples, "53_regression_stability_runner")
+    table.insert(examples, "02-assimp-viewer")
+    table.insert(examples, "17-assimp-multi-format-viewer")
+    table.insert(examples, "19-gltf-validation-suite")
+    table.insert(examples, "30-gltf-material-animation-validation")
+    table.insert(examples, "38-asset-import-parity-lab")
+    table.insert(examples, "47-regression-scene-runner")
+    table.insert(examples, "48-gltf-extensions-texture-transform")
+    table.insert(examples, "53-regression-stability-runner")
 end
 
 for _, name in ipairs(examples) do
     target(name)
         set_kind("binary")
-        add_files(name .. "/main.cpp")
-        add_deps("threecpp")
+        add_files(name .. "/main.cc")
+        add_deps("three")
         add_includedirs("../src")
 end

@@ -1,4 +1,4 @@
-set_project("threecpp_renderer")
+set_project("three-renderer")
 set_version("6.0.60")
 set_languages("c++20")
 

@@ -1,8 +1,8 @@
-target("threecpp")
+target("three")
     set_kind("static")
-    add_files("**.cpp")
+    add_files("**.cc")
     if not has_config("enable_assimp") then
-        remove_files("loader/AssimpLoader.cpp")
+        remove_files("loader/assimp-loader.cc")
     end
     add_includedirs(".", {public = true})
     add_packages("glm", "glfw", {public = true})

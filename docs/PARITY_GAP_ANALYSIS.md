@@ -284,8 +284,7 @@
 
 > **Rendering core coverage:** ~90% (all major material types, lights, shadows, IBL, PMREM, transmission, skinning, morph targets, fog, scene backgrounds, sprites, and full animation system now work).
 >
-> **Total feature coverage (including peripherals):** ~39% (helpers, audio, loaders, math, geometries are mostly missing but do not affect rendering capability).
+> **Total feature coverage (including peripherals): ~44% (post-processing, raycaster, color, math utilities all newly added — see below).
 >
-> **Next highest-impact items:** RectAreaLight LTC evaluation, functional post-processing passes (bloom, FXAA), clipping planes, 3D/array render targets.
+> **Next highest-impact items: RectAreaLight LTC evaluation, clipping planes, PCFSoft/VSM shadows, WebGPU backend.
 > 
-> **This update (2026-06-08):** Added Fog/FogExp2, MeshNormalMaterial, MeshMatcapMaterial, MeshToonMaterial, ShadowMaterial, scene background texture rendering, sprite billboard support. Full animation system parity achieved.

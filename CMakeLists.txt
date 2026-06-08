@@ -63,9 +63,9 @@ if(THREECPP_ENABLE_ASSIMP)
     endif()
 endif()
 
-file(GLOB_RECURSE THREECPP_SOURCES CONFIGURE_DEPENDS src/*.cpp)
+file(GLOB_RECURSE THREECPP_SOURCES CONFIGURE_DEPENDS src/*.cc)
 if(NOT THREECPP_ENABLE_ASSIMP)
-    list(FILTER THREECPP_SOURCES EXCLUDE REGEX ".*/src/loader/AssimpLoader\\.cpp$")
+    list(FILTER THREECPP_SOURCES EXCLUDE REGEX ".*/src/loader/AssimpLoader\\.cc$")
 endif()
 
 add_library(threecpp STATIC ${THREECPP_SOURCES})
@@ -106,7 +106,7 @@ else()
 endif()
 
 function(threecpp_add_example name)
-    add_executable(${name} examples/${name}/main.cpp)
+    add_executable(${name} examples/${name}/main.cc)
     target_link_libraries(${name} PRIVATE threecpp)
     if(THREECPP_ANGLE_BIN_DIR)
         add_custom_command(TARGET ${name} POST_BUILD
@@ -119,28 +119,28 @@ endfunction()
 
 if(THREECPP_BUILD_EXAMPLES)
     foreach(example
-        00_clear_screen
-        01_basic_primitives
-        03_pbr_lights
-        04_fatline
-        05_skinning
-        06_physical_transmission
-        07_transmission_render_target
-        08_macos_glfw_native_test
-        09_pbr_envmap
-        10_pmrem_lut
-        11_material_geometry_matrix
-        12_shadow_map
-        13_v2_0_threejs_stack
+        00-clear-screen
+        01-basic-primitives
+        03-pbr-lights
+        04-fatline
+        05-skinning
+        06-physical-transmission
+        07-transmission-render-target
+        08-macos-glfw-native-test
+        09-pbr-envmap
+        10-pmrem-lut
+        11-material-geometry-matrix
+        12-shadow-map
+        13-v2-0-threejs-stack
     )
         threecpp_add_example(${example})
     endforeach()
 
     if(THREECPP_USE_ANGLE)
-        threecpp_add_example(08_glfw_angle_renderer_test)
+        threecpp_add_example(08-glfw-angle-renderer-test)
     endif()
 
     if(THREECPP_ENABLE_ASSIMP)
-        threecpp_add_example(02_assimp_viewer)
+        threecpp_add_example(02-assimp-viewer)
     endif()
 endif()

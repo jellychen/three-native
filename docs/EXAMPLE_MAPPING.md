@@ -291,7 +291,7 @@ These use web APIs that don't exist in native C++:
 ## How to Port New Examples
 
 1. Create `examples/XX_name/main.cpp`
-2. Use `using namespace threecpp;` and include relevant headers
+2. Use `using namespace THREE;` and include relevant headers
 3. Create `Window`, `Scene`, `Camera`, `GLRenderer`
 4. Add objects/materials/lights matching the three.js JS code
 5. Add to `examples/xmake.lua`
