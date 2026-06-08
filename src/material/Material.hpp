@@ -19,6 +19,10 @@ enum class MaterialType {
     Sprite,
     Shader,
     Depth,
+    MeshNormal,
+    MeshMatcap,
+    MeshToon,
+    Shadow,
     Distance
 };
 
@@ -49,6 +53,10 @@ public:
     bool polygonOffset = false;
     float polygonOffsetFactor = 0.0f;
     float polygonOffsetUnits = 0.0f;
+
+    std::vector<glm::vec4> clippingPlanes;
+    bool clipIntersection = false;
+    int clippingPlaneCount() const { return static_cast<int>(clippingPlanes.size()); }
 
     Side side = Side::FrontSide;
     Blending blending = Blending::Normal;
@@ -196,6 +204,70 @@ public:
 
     MeshPhysicalMaterial() { type = MaterialType::MeshPhysical; }
 };
+class MeshNormalMaterial : public Material {
+public:
+    std::shared_ptr<Texture> bumpMap;
+    float bumpScale = 1.0f;
+    std::shared_ptr<Texture> normalMap;
+    glm::vec2 normalScale{1.0f, 1.0f};
+    std::shared_ptr<Texture> displacementMap;
+    float displacementScale = 1.0f;
+    float displacementBias = 0.0f;
+    bool wireframe = false;
+    bool flatShading = false;
+    MeshNormalMaterial() { type = MaterialType::MeshNormal; }
+};
+
+class MeshMatcapMaterial : public Material {
+public:
+    glm::vec3 color{1.0f};
+    std::shared_ptr<Texture> matcap;
+    std::shared_ptr<Texture> map;
+    std::shared_ptr<Texture> alphaMap;
+    std::shared_ptr<Texture> bumpMap;
+    float bumpScale = 1.0f;
+    std::shared_ptr<Texture> normalMap;
+    glm::vec2 normalScale{1.0f, 1.0f};
+    std::shared_ptr<Texture> displacementMap;
+    float displacementScale = 1.0f;
+    float displacementBias = 0.0f;
+    bool flatShading = false;
+    MeshMatcapMaterial() { type = MaterialType::MeshMatcap; }
+};
+
+class MeshToonMaterial : public Material {
+public:
+    glm::vec3 color{1.0f};
+    glm::vec3 emissive{0.0f};
+    float emissiveIntensity = 1.0f;
+    float specularIntensity = 1.0f;
+    glm::vec3 specularColor{0.067f};
+    std::shared_ptr<Texture> map;
+    std::shared_ptr<Texture> alphaMap;
+    std::shared_ptr<Texture> normalMap;
+    glm::vec2 normalScale{1.0f, 1.0f};
+    std::shared_ptr<Texture> bumpMap;
+    float bumpScale = 1.0f;
+    std::shared_ptr<Texture> displacementMap;
+    float displacementScale = 1.0f;
+    float displacementBias = 0.0f;
+    std::shared_ptr<Texture> emissiveMap;
+    std::shared_ptr<Texture> aoMap;
+    std::shared_ptr<Texture> lightMap;
+    float lightMapIntensity = 1.0f;
+    float aoMapIntensity = 1.0f;
+    std::shared_ptr<Texture> gradientMap;
+    bool flatShading = false;
+    MeshToonMaterial() { type = MaterialType::MeshToon; }
+};
+
+class ShadowMaterial : public Material {
+public:
+    glm::vec3 color{0.0f};
+    bool fog = false;
+    ShadowMaterial() { type = MaterialType::Shadow; transparent = true; }
+};
+
 
 class LineBasicMaterial : public Material {
 public:

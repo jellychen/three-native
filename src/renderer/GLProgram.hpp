@@ -39,6 +39,7 @@ struct ProgramKey {
     bool usePBRPointShadow = false;
     bool useDashedLine = false;
     bool useSizeAttenuation = false;
+    bool useClipping = false;
 
     bool usePhysical = false;
     bool useTransmission = false;

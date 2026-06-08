@@ -78,6 +78,26 @@ class GLRenderer {
     // Backside view-depth target for three.js-style transmission thickness approximation.
     std::unique_ptr<GLRenderTarget> transmissionBackfaceTarget;
     GLShadowMap shadowMap;
+
+    // Background and sprite rendering state (lazy-init)
+    struct BackgroundMesh {
+        GLuint vao = 0;
+        GLuint vbo = 0;
+        GLuint ibo = 0;
+        int indexCount = 0;
+    };
+    BackgroundMesh bgCube;
+    BackgroundMesh bgQuad;
+    GLuint bgEquirectProgram = 0;
+    GLuint bgCubeProgram = 0;
+    GLuint bg2DProgram = 0;
+    GLuint spriteProgram = 0;
+    GLuint spriteVao = 0;
+    GLuint spriteVbo = 0;
+
+    void ensureBackgroundResources();
+    void renderBackground(Scene& scene, Camera& camera);
+
     bool frustumCullingOverride = false;
 
 public:

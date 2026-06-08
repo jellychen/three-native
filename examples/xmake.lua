@@ -21,9 +21,9 @@ local examples = {
     "22_multi_light_shadow_test",
     "23_moving_lights_test",
     "24_light_falloff_spot_test",
-    "27_shadow_completeness_lab",
-    "26_physical_material_parity_lab",
     "25_standard_physical_pmrem_shadow_lab",
+    "26_physical_material_parity_lab",
+    "27_shadow_completeness_lab",
     "28_hdr_pmrem_pipeline",
     "29_pmrem_roughness_lod_lab",
     "31_standard_material_channel_lab",
@@ -46,7 +46,13 @@ local examples = {
     "52_webglrenderer_state_cache_lab",
     "54_directional_shadow_only_lab",
     "55_spot_shadow_only_lab",
-    "56_pbr_pmrem_specular_restore"
+    "56_pbr_pmrem_specular_restore",
+    "57_furnace_test",
+    "58_equirect_background",
+    "59_helpers",
+    "60_clipping",
+    "61_rectarealight",
+    "62_pbr_comprehensive"
 }
 
 if has_config("use_angle") then

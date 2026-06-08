@@ -69,6 +69,7 @@ std::string ShaderChunk::defines(const ProgramKey& key) {
     def(key.usePBRSpotShadow, "USE_PBR_SPOT_SHADOW");
     def(key.usePBRPointShadow, "USE_PBR_POINT_SHADOW");
     def(key.useDashedLine, "USE_DASHED_LINE");
+    def(key.useClipping, "USE_CLIPPING");
     def(key.usePhysical, "USE_PHYSICAL");
     def(key.useTransmission, "USE_TRANSMISSION");
     def(key.useTransmissionMap, "USE_TRANSMISSIONMAP");
@@ -371,6 +372,34 @@ vec3 perturbNormalBump(vec3 N, vec3 V, vec2 uv, sampler2D bumpMap, float bumpSca
 )GLSL";
 }
 
+
+std::string ShaderChunk::fog() {
+    return R"GLSL(
+#ifdef USE_FOG
+uniform vec3 fogColor;
+uniform float fogNear;
+uniform float fogFar;
+uniform float fogDensity;
+uniform int fogType;
+float applyFogFactor(vec3 worldPos, vec3 camPos) {
+    float d = distance(worldPos, camPos);
+    float factor = 1.0;
+    if (fogType == 0) {
+        factor = clamp((fogFar - d) / max(fogFar - fogNear, 0.0001), 0.0, 1.0);
+    } else {
+        factor = exp(-fogDensity * fogDensity * d * d);
+        factor = clamp(factor, 0.0, 1.0);
+    }
+    return factor;
+}
+vec3 applyFog(vec3 color, vec3 worldPos, vec3 camPos) {
+    float factor = applyFogFactor(worldPos, camPos);
+    return mix(fogColor, color, factor);
+}
+#endif
+)GLSL";
+}
+
 std::string ShaderChunk::fragmentCore() {
     return begin("common") + common() + end("common") +
            begin("colorspace") + colorSpace() + end("colorspace") +
@@ -380,6 +409,7 @@ std::string ShaderChunk::fragmentCore() {
            begin("physical") + physical() + end("physical") +
            begin("ibl") + ibl() + end("ibl") +
            begin("shadow") + shadow() + end("shadow") +
+           begin("fog") + ShaderChunk::fog() + end("fog") +
            begin("normal_perturb") + normalPerturb() + end("normal_perturb");
 }
 

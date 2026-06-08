@@ -39,6 +39,7 @@ public:
     static std::string pbrMath();
     static std::string ibl();
     static std::string shadow();
+    static std::string fog();
     static std::string normalPerturb();
     static std::string physical();
     static std::string fragmentCore();

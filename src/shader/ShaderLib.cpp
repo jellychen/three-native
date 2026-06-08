@@ -97,6 +97,26 @@ float threecppSafeAlpha(float a) {
     if (isnan(a) || isinf(a)) return 1.0;
     return clamp(a, 0.0, 1.0);
 }
+
+#ifdef USE_FOG
+uniform vec3 fogColor;
+uniform float fogNear;
+uniform float fogFar;
+uniform float fogDensity;
+uniform int fogType;
+vec3 applyFog(vec3 color, vec3 worldPos, vec3 camPos) {
+    float d = distance(worldPos, camPos);
+    float factor = 1.0;
+    if (fogType == 0) {
+        factor = clamp((fogFar - d) / max(fogFar - fogNear, 0.0001), 0.0, 1.0);
+    } else {
+        factor = exp(-fogDensity * fogDensity * d * d);
+        factor = clamp(factor, 0.0, 1.0);
+    }
+    factor = clamp(factor, 0.0, 1.0);
+    return mix(fogColor, color, factor);
+}
+#endif
 )GLSL" + ShaderChunk::fragmentCore();
 }
 
@@ -482,7 +502,11 @@ void main() {
 #endif
     if (a < alphaTest) discard;
     vec3 visibleColor = max(diffuse * vColor * texel.rgb, vec3(0.12) * diffuse);
-    outColor = finalOutput(threecppSafeColor(visibleColor, diffuse), max(threecppSafeAlpha(a), 0.35));
+    vec3 foggedColor = threecppSafeColor(visibleColor, diffuse);
+#ifdef USE_FOG
+    foggedColor = applyFog(foggedColor, vWorldPosition, cameraPosition);
+#endif
+    outColor = finalOutput(foggedColor, max(threecppSafeAlpha(a), 0.35));
 }
 )GLSL";
     } else if (key.materialType == MaterialType::MeshLambert || key.materialType == MaterialType::MeshPhong) {
@@ -534,6 +558,9 @@ void main() {
     alpha *= scalarChannel(texture(alphaMap, vUv), alphaChannel);
 #endif
     if (alpha < alphaTest) discard;
+#ifdef USE_CLIPPING
+    checkClipping(vWorldPosition);
+#endif
     vec3 baseColor = diffuse * vColor * texel.rgb;
     if (materialDebugMode == 1) { outColor = vec4(max(baseColor, vec3(0.15)), max(alpha, 0.35)); return; }
     if (materialDebugMode == 2) { vec3 nn = normalize(vNormal); outColor = vec4(nn * 0.5 + 0.5, 1.0); return; }
@@ -614,6 +641,9 @@ void main() {
     total = threecppSafeColor(total, baseColor);
     total = max(total, baseColor * 0.12);
     alpha = max(threecppSafeAlpha(alpha), 0.35);
+    #ifdef USE_FOG
+    total = applyFog(total, vWorldPosition, cameraPosition);
+#endif
     outColor = finalOutput(total, alpha);
 }
 )GLSL";
@@ -1189,7 +1219,267 @@ void main() {
 #else
     total = max(total, baseColor * 0.18 + vec3(0.02));
 #endif
+    #ifdef USE_FOG
+    total = applyFog(total, vWorldPosition, cameraPosition);
+#endif
     outColor = finalOutput(total, max(threecppSafeAlpha(alpha), 0.35));
+}
+)GLSL";
+
+    } else if (key.materialType == MaterialType::MeshNormal) {
+        fragment += common_fragment() + R"GLSL(
+uniform vec3 diffuse;
+uniform float opacity;
+uniform vec2 normalScale;
+#ifdef USE_BUMPMAP
+uniform sampler2D bumpMap;
+uniform float bumpScale;
+#endif
+#ifdef USE_NORMALMAP
+uniform sampler2D normalMap;
+#endif
+in vec2 vUv;
+in vec3 vNormal;
+in vec3 vViewPosition;
+in vec3 vWorldPosition;
+out vec4 outColor;
+void main() {
+    float a = opacity;
+    if (a < alphaTest) discard;
+#ifdef USE_CLIPPING
+    checkClipping(vWorldPosition);
+#endif
+    vec3 N = normalize(vNormal);
+#ifdef USE_FLAT_SHADING
+    vec3 flatN = cross(dFdx(vWorldPosition), dFdy(vWorldPosition));
+    N = normalize(flatN);
+    if (dot(N, normalize(cameraPosition - vWorldPosition)) < 0.0) N = -N;
+#endif
+#ifdef USE_NORMALMAP
+    N = perturbNormal(N, normalize(vViewPosition), vUv, normalMap, normalScale);
+#elif defined(USE_BUMPMAP)
+    N = perturbNormalBump(N, normalize(vViewPosition), vUv, bumpMap, bumpScale);
+#endif
+    vec3 normalColor = N * 0.5 + 0.5;
+    vec3 foggedColor = normalColor;
+#ifdef USE_FOG
+    foggedColor = applyFog(foggedColor, vWorldPosition, cameraPosition);
+#endif
+    outColor = finalOutput(foggedColor, max(a, 0.35));
+}
+)GLSL";
+    } else if (key.materialType == MaterialType::MeshMatcap) {
+        fragment += common_fragment() + R"GLSL(
+uniform vec3 diffuse;
+uniform float opacity;
+uniform vec2 normalScale;
+#ifdef USE_BUMPMAP
+uniform sampler2D bumpMap;
+uniform float bumpScale;
+#endif
+#ifdef USE_NORMALMAP
+uniform sampler2D normalMap;
+#endif
+uniform sampler2D matcap;
+#ifdef USE_MAP
+uniform sampler2D map;
+#endif
+#ifdef USE_ALPHAMAP
+uniform sampler2D alphaMap;
+#endif
+in vec2 vUv;
+in vec3 vColor;
+in vec3 vNormal;
+in vec3 vViewPosition;
+in vec3 vWorldPosition;
+out vec4 outColor;
+void main() {
+    vec4 texel = vec4(1.0);
+#ifdef USE_MAP
+    texel *= texture(map, vUv);
+    texel.rgb = srgbToLinear(texel.rgb);
+#endif
+    float a = opacity * texel.a;
+#ifdef USE_ALPHAMAP
+    a *= texture(alphaMap, vUv).r;
+#endif
+    if (a < alphaTest) discard;
+    vec3 N = normalize(vNormal);
+#ifdef USE_FLAT_SHADING
+    vec3 flatN = cross(dFdx(vWorldPosition), dFdy(vWorldPosition));
+    N = normalize(flatN);
+    if (dot(N, normalize(cameraPosition - vWorldPosition)) < 0.0) N = -N;
+#endif
+#ifdef USE_NORMALMAP
+    N = perturbNormal(N, normalize(vViewPosition), vUv, normalMap, normalScale);
+#elif defined(USE_BUMPMAP)
+    N = perturbNormalBump(N, normalize(vViewPosition), vUv, bumpMap, bumpScale);
+#endif
+    vec3 V = normalize(cameraPosition - vWorldPosition);
+    vec3 R = reflect(-V, N);
+    float m = 2.0 * sqrt(R.x * R.x + R.y * R.y + (R.z + 1.0) * (R.z + 1.0));
+    vec2 matUv = vec2(R.x / m + 0.5, R.y / m + 0.5);
+    vec3 matcapColor = srgbToLinear(texture(matcap, matUv).rgb);
+    vec3 finalColor = diffuse * vColor * texel.rgb * matcapColor;
+    vec3 foggedColor = threecppSafeColor(finalColor, diffuse);
+#ifdef USE_FOG
+    foggedColor = applyFog(foggedColor, vWorldPosition, cameraPosition);
+#endif
+    outColor = finalOutput(foggedColor, max(a, 0.35));
+}
+)GLSL";
+    } else if (key.materialType == MaterialType::MeshToon) {
+        fragment += common_fragment() + R"GLSL(
+uniform vec3 diffuse;
+uniform vec3 emissive;
+uniform float opacity;
+uniform vec3 specularColor;
+uniform float specularIntensity;
+uniform vec2 normalScale;
+uniform float lightMapIntensity;
+uniform float aoMapIntensity;
+#ifdef USE_BUMPMAP
+uniform sampler2D bumpMap;
+uniform float bumpScale;
+#endif
+#ifdef USE_NORMALMAP
+uniform sampler2D normalMap;
+#endif
+#ifdef USE_MAP
+uniform sampler2D map;
+#endif
+#ifdef USE_ALPHAMAP
+uniform sampler2D alphaMap;
+#endif
+#ifdef USE_EMISSIVEMAP
+uniform sampler2D emissiveMap;
+#endif
+#ifdef USE_AOMAP
+uniform sampler2D aoMap;
+#endif
+#ifdef USE_LIGHTMAP
+uniform sampler2D lightMap;
+#endif
+in vec2 vUv;
+in vec2 vUv2;
+in vec3 vColor;
+in vec3 vNormal;
+in vec3 vWorldPosition;
+in vec3 vViewPosition;
+out vec4 outColor;
+void main() {
+    vec4 texel = vec4(1.0);
+#ifdef USE_MAP
+    texel *= texture(map, vUv);
+    texel.rgb = srgbToLinear(texel.rgb);
+#endif
+    float a = opacity * texel.a;
+#ifdef USE_ALPHAMAP
+    a *= texture(alphaMap, vUv).r;
+#endif
+    if (a < alphaTest) discard;
+    vec3 baseColor = diffuse * vColor * texel.rgb;
+    vec3 N = normalize(vNormal);
+    vec3 V = normalize(cameraPosition - vWorldPosition);
+#ifdef USE_FLAT_SHADING
+    vec3 flatN = cross(dFdx(vWorldPosition), dFdy(vWorldPosition));
+    N = normalize(flatN);
+    if (dot(N, V) < 0.0) N = -N;
+#endif
+#ifdef USE_NORMALMAP
+    N = perturbNormal(N, normalize(vViewPosition), vUv, normalMap, normalScale);
+#elif defined(USE_BUMPMAP)
+    N = perturbNormalBump(N, normalize(vViewPosition), vUv, bumpMap, bumpScale);
+#endif
+    vec3 total = baseColor * (ambientLightColor + hemisphereIrradiance(N, hemisphereSkyColor + envSkyColor, hemisphereGroundColor + envGroundColor)) / PI;
+    for (int i = 0; i < MAX_LIGHTS; ++i) {
+        if (i >= lightCount) break;
+        GpuLight l = lights[i];
+        vec3 L = vec3(0.0);
+        vec3 radiance = l.colorIntensity.rgb * l.colorIntensity.a;
+        if (l.type == 1) {
+            L = normalize(-l.directionCone.xyz);
+        } else if (l.type == 2 || l.type == 3 || l.type == 4) {
+            vec3 toLight = l.positionRange.xyz - vWorldPosition;
+            float dist2 = max(dot(toLight, toLight), 0.0001);
+            float dist = sqrt(dist2);
+            L = toLight / dist;
+            float range = l.positionRange.w;
+            float decay = l.params.x;
+            float attenuation = decay <= 0.0001 ? 1.0 : 1.0 / max(pow(dist, decay), 0.01);
+            if (range > 0.0) {
+                float cutoff = max(1.0 - pow(dist / range, 4.0), 0.0);
+                attenuation *= cutoff * cutoff;
+            }
+            if (l.type == 3) {
+                float spotCos = dot(normalize(l.directionCone.xyz), -L);
+                float outerCone = l.directionCone.w;
+                float innerCone = l.params.y;
+                float coneAttenuation = (innerCone - outerCone) < 0.0001 ? step(outerCone, spotCos) : smoothstep(outerCone, innerCone, spotCos);
+                attenuation *= coneAttenuation;
+            }
+            radiance *= attenuation;
+        }
+        float shadow = 1.0;
+#ifdef USE_SHADOWMAP
+        float pbrShadow = sampleShadowMap(l.shadowIndex, vWorldPosition);
+        if (!isnan(pbrShadow) && !isinf(pbrShadow)) shadow = clamp(pbrShadow, 0.0, 1.0);
+#endif
+        radiance *= mix(1.0, shadow, 0.85);
+        float NoL = saturate(dot(N, L));
+        float toon = smoothstep(0.0, 0.08, NoL);
+        total += baseColor * radiance * toon / PI;
+        vec3 H = normalize(V + L);
+        float NoH = saturate(dot(N, H));
+        float spec = pow(NoH, mix(8.0, 96.0, 0.5));
+        total += specularColor * specularIntensity * spec * radiance * toon * 0.5;
+    }
+#ifdef USE_AOMAP
+    total *= mix(1.0, texture(aoMap, vUv2).r, aoMapIntensity);
+#endif
+#ifdef USE_LIGHTMAP
+    total += baseColor * srgbToLinear(texture(lightMap, vUv2).rgb) * lightMapIntensity;
+#endif
+#ifdef USE_EMISSIVEMAP
+    total += emissive * srgbToLinear(texture(emissiveMap, vUv).rgb);
+#else
+    total += emissive;
+#endif
+    total = threecppSafeColor(total, baseColor);
+    total = max(total, baseColor * 0.12);
+#ifdef USE_FOG
+    total = applyFog(total, vWorldPosition, cameraPosition);
+#endif
+    outColor = finalOutput(total, max(a, 0.35));
+}
+)GLSL";
+    } else if (key.materialType == MaterialType::Shadow) {
+        fragment += common_fragment() + R"GLSL(
+uniform vec3 diffuse;
+uniform float opacity;
+in vec3 vWorldPosition;
+out vec4 outColor;
+void main() {
+    float a = opacity;
+    if (a < alphaTest) discard;
+    vec3 shadowColor = diffuse;
+    float sh = 0.0;
+    int numShadowsFound = 0;
+    for (int i = 0; i < MAX_LIGHTS; ++i) {
+        if (i >= lightCount) break;
+        GpuLight l = lights[i];
+        if (l.shadowIndex >= 0 && l.shadowIndex < shadowMapCount) {
+            float s = sampleShadowMap(l.shadowIndex, vWorldPosition);
+            if (!isnan(s) && !isinf(s)) { sh += clamp(s, 0.0, 1.0); numShadowsFound++; }
+        }
+    }
+    if (numShadowsFound > 0) sh /= float(numShadowsFound);
+    vec3 finalColor = mix(shadowColor, vec3(1.0), sh);
+    vec3 foggedColor = threecppSafeColor(finalColor, shadowColor);
+#ifdef USE_FOG
+    foggedColor = applyFog(foggedColor, vWorldPosition, cameraPosition);
+#endif
+    outColor = finalOutput(foggedColor, max(a, 0.35));
 }
 )GLSL";
     } else {
@@ -1224,7 +1514,11 @@ void main() {
 #endif
     if (a < alphaTest) discard;
     vec3 visibleColor = max(diffuse * vColor * texel.rgb, vec3(0.12) * diffuse);
-    outColor = finalOutput(threecppSafeColor(visibleColor, diffuse), max(threecppSafeAlpha(a), 0.35));
+    vec3 foggedColor = threecppSafeColor(visibleColor, diffuse);
+#ifdef USE_FOG
+    foggedColor = applyFog(foggedColor, vWorldPosition, cameraPosition);
+#endif
+    outColor = finalOutput(foggedColor, max(threecppSafeAlpha(a), 0.35));
 }
 )GLSL";
     }

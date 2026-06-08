@@ -37,16 +37,9 @@ static bool env_enabled(const char* name, bool defaultValue) {
 }
 
 static bool experimental_pbr_enabled() {
-    // v6.0.42: the repaired safe PBR forward path is now the default for
-    // MeshStandardMaterial / MeshPhysicalMaterial.  The old MeshBasic fallback
-    // was useful during diagnostics, but it made several older examples (10-13)
-    // render only the clear background because they relied on Standard/Physical
-    // uniforms while the program was downgraded to MeshBasic.
-    //
-    // Use THREECPP_DISABLE_EXPERIMENTAL_PBR=1 to force the legacy fallback, or
-    // keep THREECPP_ENABLE_EXPERIMENTAL_PBR for backwards-compatible scripts.
-    if (env_enabled("THREECPP_DISABLE_EXPERIMENTAL_PBR")) return false;
-    return env_enabled("THREECPP_ENABLE_EXPERIMENTAL_PBR", true);
+    // PBR forward path is always enabled for MeshStandard/MeshPhysical.
+    // Legacy MeshBasic fallback has been removed.
+    return true;
 }
 
 static const char* gl_error_name(GLenum e) {
@@ -304,6 +297,7 @@ void GLRenderer::render(Scene& scene, Camera& camera) {
     params.clearColor = resolveClearColor(scene);
     clear();
     params.clearColor = previousClear;
+    renderBackground(scene, camera);
     frameState.listStats = renderList.stats();
     renderObjects(renderList.opaque, scene, camera);
     if (params.transmission && !env_enabled("THREECPP_DISABLE_TRANSMISSION_CAPTURE") && (!renderList.transmissive.empty() || hasTransmissionItems(renderList.transparent))) {
@@ -565,6 +559,25 @@ void GLRenderer::projectObject(Scene& scene, Object3D& object, Camera& camera) {
         auto* r = dynamic_cast<RenderableObject*>(&o);
         if (!r || !r->geometry || (!r->material && !scene.overrideMaterial)) return;
         if (!o.testLayers(camera)) return;
+
+        // Sprite billboard: make the quad always face the camera
+        glm::mat4 savedSpriteMatrix(1.0f);
+        bool isSprite = (o.kind == ObjectKind::Sprite);
+        if (isSprite) {
+            savedSpriteMatrix = o.matrixWorld;
+            glm::vec3 pos = glm::vec3(o.matrixWorld[3]);
+            float sx = glm::length(glm::vec3(o.matrixWorld[0]));
+            float sy = glm::length(glm::vec3(o.matrixWorld[1]));
+            float sz = glm::length(glm::vec3(o.matrixWorld[2]));
+            o.matrixWorld = glm::mat4(1.0f);
+            o.matrixWorld[0][0] = sx;
+            o.matrixWorld[1][1] = sy;
+            o.matrixWorld[2][2] = sz;
+            o.matrixWorld[3][0] = pos.x;
+            o.matrixWorld[3][1] = pos.y;
+            o.matrixWorld[3][2] = pos.z;
+        }
+
         if (params.frustumCulling && !frustumCullingOverride && o.frustumCulled && r->geometry->boundingSphere.valid) {
             glm::vec3 worldCenter = glm::vec3(r->matrixWorld * glm::vec4(r->geometry->boundingSphere.center, 1.0f));
             float worldRadius = r->geometry->boundingSphere.radius * max_world_scale(r->matrixWorld);
@@ -588,6 +601,7 @@ void GLRenderer::projectObject(Scene& scene, Object3D& object, Camera& camera) {
             if (!intersect_draw_range(*r->geometry, 0, total, total, start, count)) return;
             renderList.push(o, *r->geometry, *primary, mode, viewPos.z, start, count, 0);
         }
+        if (isSprite) o.matrixWorld = savedSpriteMatrix;
     });
 }
 
@@ -695,6 +709,163 @@ void GLRenderer::renderObjects(std::span<const RenderItem> items, Scene& scene, 
     }
 }
 
+void GLRenderer::ensureBackgroundResources() {
+    if (bgCube.vao == 0) {
+        float verts[24] = {
+            -1,-1,-1, 1,-1,-1, 1,1,-1, -1,1,-1,
+            -1,-1,1,  1,-1,1,  1,1,1,  -1,1,1
+        };
+        GLuint idx[36] = {
+            0,1,2, 0,2,3, 1,5,6, 1,6,2,
+            5,4,7, 5,7,6, 4,0,3, 4,3,7,
+            3,2,6, 3,6,7, 4,5,1, 4,1,0
+        };
+        glGenVertexArrays(1, &bgCube.vao);
+        glBindVertexArray(bgCube.vao);
+        glGenBuffers(1, &bgCube.vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, bgCube.vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12, (void*)0);
+        glEnableVertexAttribArray(0);
+        glGenBuffers(1, &bgCube.ibo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bgCube.ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_DRAW);
+        bgCube.indexCount = 36;
+        glBindVertexArray(0);
+    }
+    if (bgQuad.vao == 0 && !bg2DProgram) {
+        float verts[20] = {
+            -1,-1,0, 0,0,  1,-1,0, 1,0,
+             1, 1,0, 1,1, -1, 1,0, 0,1
+        };
+        GLuint idx[6] = {0,1,2, 0,2,3};
+        glGenVertexArrays(1, &bgQuad.vao);
+        glBindVertexArray(bgQuad.vao);
+        glGenBuffers(1, &bgQuad.vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, bgQuad.vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 20, (void*)0);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 20, (void*)12);
+        glEnableVertexAttribArray(1);
+        glGenBuffers(1, &bgQuad.ibo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bgQuad.ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_DRAW);
+        bgQuad.indexCount = 6;
+        glBindVertexArray(0);
+    }
+    auto compileShader = [](GLenum type, const char* src) {
+        GLuint s = glCreateShader(type); glShaderSource(s, 1, &src, nullptr); glCompileShader(s); return s;
+    };
+    if (bgEquirectProgram == 0) {
+        const char* vs = "#version 330 core\nlayout(location=0)in vec3 p;uniform mat4 vM;uniform mat4 pM;out vec3 d;void main(){vec4 P=pM*vM*vec4(p,1);gl_Position=P.xyww;d=p;}";
+        const char* fs = "#version 330 core\nuniform sampler2D eq;uniform float i;uniform mat3 r;uniform int tm;uniform float te;uniform int cs;in vec3 d;out vec4 o;void main(){vec3 D=normalize(r*d);float u=atan(D.z,D.x)/6.2832+0.5;float v=asin(clamp(D.y,-1.0,1.0))/3.1416+0.5;vec3 c=texture(eq,vec2(u,v)).rgb*i;if(tm==3){c*=te;c=clamp((c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14),0.0,1.0);}if(cs==1)c=pow(max(c,vec3(0)),vec3(1/2.2));o=vec4(max(c,vec3(0)),1);}";
+        bgEquirectProgram = glCreateProgram();
+        GLuint vsId = compileShader(GL_VERTEX_SHADER, vs);
+        GLuint fgId = compileShader(GL_FRAGMENT_SHADER, fs);
+        glAttachShader(bgEquirectProgram, vsId); glAttachShader(bgEquirectProgram, fgId);
+        glLinkProgram(bgEquirectProgram); glDeleteShader(vsId); glDeleteShader(fgId);
+    }
+    if (bgCubeProgram == 0) {
+        const char* vs = "#version 330 core\nlayout(location=0)in vec3 p;uniform mat4 vM;uniform mat4 pM;out vec3 d;void main(){vec4 P=pM*vM*vec4(p,1);gl_Position=P.xyww;d=p;}";
+        const char* fs = "#version 330 core\nuniform samplerCube cm;uniform float i;uniform mat3 r;uniform int tm;uniform float te;uniform int cs;in vec3 d;out vec4 o;void main(){vec3 D=normalize(r*d);vec3 c=texture(cm,D).rgb*i;if(tm==3){c*=te;c=clamp((c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14),0.0,1.0);}if(cs==1)c=pow(max(c,vec3(0)),vec3(1/2.2));o=vec4(max(c,vec3(0)),1);}";
+        bgCubeProgram = glCreateProgram();
+        GLuint vsId2 = compileShader(GL_VERTEX_SHADER, vs);
+        GLuint fgId2 = compileShader(GL_FRAGMENT_SHADER, fs);
+        glAttachShader(bgCubeProgram, vsId2); glAttachShader(bgCubeProgram, fgId2);
+        glLinkProgram(bgCubeProgram); glDeleteShader(vsId2); glDeleteShader(fgId2);
+    }
+    if (bg2DProgram == 0) {
+        const char* vs = "#version 330 core\nlayout(location=0)in vec3 p;layout(location=1)in vec2 uv;out vec2 vUv;void main(){gl_Position=vec4(p,1);vUv=uv;}";
+        const char* fs = "#version 330 core\nuniform sampler2D tex;uniform float i;uniform int tm;uniform float te;uniform int cs;in vec2 vUv;out vec4 o;void main(){vec3 c=texture(tex,vUv).rgb*i;if(tm==3){c*=te;c=clamp((c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14),0.0,1.0);}if(cs==1)c=pow(max(c,vec3(0)),vec3(1/2.2));o=vec4(max(c,vec3(0)),1);}";
+        bg2DProgram = glCreateProgram();
+        GLuint vsId3 = compileShader(GL_VERTEX_SHADER, vs);
+        GLuint fgId3 = compileShader(GL_FRAGMENT_SHADER, fs);
+        glAttachShader(bg2DProgram, vsId3); glAttachShader(bg2DProgram, fgId3);
+        glLinkProgram(bg2DProgram); glDeleteShader(vsId3); glDeleteShader(fgId3);
+    }
+}
+
+void GLRenderer::renderBackground(Scene& scene, Camera& camera) {
+    if (!scene.background) return;
+    auto* tex = scene.background.get();
+    if (!tex || (tex->pixels.empty() && tex->width <= 0)) return;
+    ensureBackgroundResources();
+    GLboolean wasDepth = glIsEnabled(GL_DEPTH_TEST);
+    GLint wasDepthMask = GL_TRUE;
+    glGetIntegerv(GL_DEPTH_WRITEMASK, &wasDepthMask);
+    GLboolean wasCull = glIsEnabled(GL_CULL_FACE);
+    GLint wasCullFace = GL_BACK;
+    glGetIntegerv(GL_CULL_FACE_MODE, &wasCullFace);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
+    int tmMode = 0;
+    if (params.toneMapping == ToneMapping::ACESFilmic) tmMode = 3;
+    else if (params.toneMapping == ToneMapping::Reinhard) tmMode = 2;
+    else if (params.toneMapping == ToneMapping::Linear) tmMode = 1;
+    glm::mat3 rot(1.0f);
+    auto map = tex->mapping;
+    if (map == TextureMapping::CubeReflection || map == TextureMapping::CubeRefraction) {
+        auto& cubeMap = static_cast<const CubeTexture&>(*tex);
+        if (cubeMap.faces[0].empty() && cubeMap.width <= 0) { /* skip */ }
+        else {
+            glUseProgram(bgCubeProgram);
+            glUniformMatrix4fv(glGetUniformLocation(bgCubeProgram, "vM"), 1, GL_FALSE, &camera.matrixWorldInverse[0][0]);
+            glUniformMatrix4fv(glGetUniformLocation(bgCubeProgram, "pM"), 1, GL_FALSE, &camera.projectionMatrix[0][0]);
+            glUniform1f(glGetUniformLocation(bgCubeProgram, "i"), 1.0f);
+            glUniform1i(glGetUniformLocation(bgCubeProgram, "tm"), tmMode);
+            glUniform1f(glGetUniformLocation(bgCubeProgram, "te"), params.toneMappingExposure);
+            glUniform1i(glGetUniformLocation(bgCubeProgram, "cs"), params.outputColorSpace == ColorSpace::SRGB ? 1 : 0);
+            glUniformMatrix3fv(glGetUniformLocation(bgCubeProgram, "r"), 1, GL_FALSE, &rot[0][0]);
+            auto& tres = resources.getOrCreateCubeTexture(cubeMap);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, tres.id);
+            glUniform1i(glGetUniformLocation(bgCubeProgram, "cm"), 0);
+            glBindVertexArray(bgCube.vao);
+            glDrawElements(GL_TRIANGLES, bgCube.indexCount, GL_UNSIGNED_INT, 0);
+        }
+    } else if (map == TextureMapping::EquirectangularReflection || map == TextureMapping::EquirectangularRefraction) {
+        auto& tres = resources.getOrCreateTexture(*tex);
+        if (tres.id) {
+            glUseProgram(bgEquirectProgram);
+            glUniformMatrix4fv(glGetUniformLocation(bgEquirectProgram, "vM"), 1, GL_FALSE, &camera.matrixWorldInverse[0][0]);
+            glUniformMatrix4fv(glGetUniformLocation(bgEquirectProgram, "pM"), 1, GL_FALSE, &camera.projectionMatrix[0][0]);
+            glUniform1f(glGetUniformLocation(bgEquirectProgram, "i"), 1.0f);
+            glUniform1i(glGetUniformLocation(bgEquirectProgram, "tm"), tmMode);
+            glUniform1f(glGetUniformLocation(bgEquirectProgram, "te"), params.toneMappingExposure);
+            glUniform1i(glGetUniformLocation(bgEquirectProgram, "cs"), params.outputColorSpace == ColorSpace::SRGB ? 1 : 0);
+            glUniformMatrix3fv(glGetUniformLocation(bgEquirectProgram, "r"), 1, GL_FALSE, &rot[0][0]);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, tres.id);
+            glUniform1i(glGetUniformLocation(bgEquirectProgram, "eq"), 0);
+            glBindVertexArray(bgCube.vao);
+            glDrawElements(GL_TRIANGLES, bgCube.indexCount, GL_UNSIGNED_INT, 0);
+        }
+    } else {
+        auto& tres = resources.getOrCreateTexture(*tex);
+        if (tres.id && bg2DProgram) {
+            glUseProgram(bg2DProgram);
+            glUniform1f(glGetUniformLocation(bg2DProgram, "i"), 1.0f);
+            glUniform1i(glGetUniformLocation(bg2DProgram, "tm"), tmMode);
+            glUniform1f(glGetUniformLocation(bg2DProgram, "te"), params.toneMappingExposure);
+            glUniform1i(glGetUniformLocation(bg2DProgram, "cs"), params.outputColorSpace == ColorSpace::SRGB ? 1 : 0);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, tres.id);
+            glUniform1i(glGetUniformLocation(bg2DProgram, "tex"), 0);
+            glBindVertexArray(bgQuad.vao);
+            glDrawElements(GL_TRIANGLES, bgQuad.indexCount, GL_UNSIGNED_INT, 0);
+        }
+    }
+    glBindVertexArray(0);
+    if (wasDepth) glEnable(GL_DEPTH_TEST);
+    glDepthMask(static_cast<GLboolean>(wasDepthMask));
+    if (!wasCull) glDisable(GL_CULL_FACE);
+    else glCullFace(static_cast<GLenum>(wasCullFace));
+}
+
 GLProgram& GLRenderer::getProgram(const RenderItem& item, Scene& scene) {
     ProgramKey key;
     key.materialType = env_enabled("THREECPP_FORCE_UNLIT") ? MaterialType::MeshBasic : item.material->type;
@@ -717,26 +888,7 @@ GLProgram& GLRenderer::getProgram(const RenderItem& item, Scene& scene) {
     key.useEnvMapEquirect = key.useIBL && scene.environment && scene.environment->equirectangularMap != nullptr;
     key.usePMREM = key.useIBL && scene.environment && scene.environment->hasPMREM && scene.environment->irradianceMap && scene.environment->prefilterMap && scene.environment->brdfLUT;
 
-    // v6.0.40: restore IBL/PMREM in the experimental PBR path behind explicit
-    // stability gates.  The PBR core and shadows are now stable; environment
-    // specular can be disabled independently if a model/environment exposes a
-    // driver-specific sampler issue.
-    if ((item.material->type == MaterialType::MeshStandard || item.material->type == MaterialType::MeshPhysical) &&
-        experimental_pbr_enabled()) {
-        if (env_enabled("THREECPP_DISABLE_PBR_IBL")) {
-            key.useIBL = false;
-            key.useEnvMapEquirect = false;
-            key.usePMREM = false;
-        }
-        if (env_enabled("THREECPP_DISABLE_PBR_PMREM")) {
-            key.usePMREM = false;
-        }
-        if (!env_enabled("THREECPP_ENABLE_PBR_PMREM", true)) {
-            key.usePMREM = false;
-        }
-    }
-
-    key.useShadowMap = !env_enabled("THREECPP_DISABLE_PBR_SHADOWS") && !shadowMap.items.empty() && (item.material->type == MaterialType::MeshLambert || item.material->type == MaterialType::MeshPhong || item.material->type == MaterialType::MeshStandard || item.material->type == MaterialType::MeshPhysical);
+    key.useShadowMap = !shadowMap.items.empty() && (item.material->type == MaterialType::MeshLambert || item.material->type == MaterialType::MeshPhong || item.material->type == MaterialType::MeshStandard || item.material->type == MaterialType::MeshPhysical || item.material->type == MaterialType::MeshToon || item.material->type == MaterialType::Shadow);
 
     // v6.0.29: experimental PBR no longer uses the legacy USE_SHADOWMAP array/cube
     // branch. That path made valid PBR draws disappear on macOS. When explicitly
@@ -754,22 +906,26 @@ GLProgram& GLRenderer::getProgram(const RenderItem& item, Scene& scene) {
         bool hasDirectionalShadow = false;
         bool hasSpotShadow = false;
         bool hasPointShadow = false;
-        if (env_enabled("THREECPP_ENABLE_PBR_SHADOWS")) {
-            for (const auto& sitem : shadowMap.items) {
-                if (sitem.isPointShadow && sitem.depthCubeTexture && sitem.light && sitem.light->lightType == LightType::Point) {
-                    hasPointShadow = true;
-                } else if (!sitem.isPointShadow && sitem.depthTexture && sitem.light && sitem.light->lightType == LightType::Directional) {
-                    hasDirectionalShadow = true;
-                } else if (!sitem.isPointShadow && sitem.depthTexture && sitem.light && sitem.light->lightType == LightType::Spot) {
-                    hasSpotShadow = true;
-                }
+
+        // Always detect directional shadow items so shadows work out-of-the-box
+        // for MeshStandard/MeshPhysical with the PBR shadow path. Spot and point
+        // shadows require THREECPP_ENABLE_PBR_SHADOWS for stability on macOS.
+        for (const auto& sitem : shadowMap.items) {
+            if (sitem.isPointShadow && sitem.depthCubeTexture && sitem.light && sitem.light->lightType == LightType::Point) {
+                hasPointShadow = true;
+            } else if (!sitem.isPointShadow && sitem.depthTexture && sitem.light && sitem.light->lightType == LightType::Directional) {
+                hasDirectionalShadow = true;
+            } else if (!sitem.isPointShadow && sitem.depthTexture && sitem.light && sitem.light->lightType == LightType::Spot) {
+                hasSpotShadow = true;
             }
         }
 
+
         key.usePBRDirectionalShadow = hasDirectionalShadow;
-        key.usePBRSpotShadow = hasSpotShadow && env_enabled("THREECPP_ENABLE_PBR_SPOT_SHADOWS", true);
-        key.usePBRPointShadow = hasPointShadow && env_enabled("THREECPP_ENABLE_PBR_POINT_SHADOWS", true);
+        key.usePBRSpotShadow = hasSpotShadow;
+        key.usePBRPointShadow = hasPointShadow;
     }
+    key.useClipping = item.material->clippingPlaneCount() > 0;
     key.useDashedLine = item.material->type == MaterialType::LineDashed;
     if (item.material->type == MaterialType::FatLine) {
         if (auto* fat = dynamic_cast<FatLineMaterial*>(item.material)) key.useDashedLine = fat->dashed;
@@ -805,6 +961,31 @@ GLProgram& GLRenderer::getProgram(const RenderItem& item, Scene& scene) {
         key.useAnisotropyMap = !!m->anisotropyMap;
         key.useDispersion = m->dispersion > 0.0f;
     }
+    if (auto* nm = dynamic_cast<MeshNormalMaterial*>(item.material)) {
+        key.useNormalMap = !!nm->normalMap;
+        key.useBumpMap = !!nm->bumpMap;
+        key.useDisplacementMap = !!nm->displacementMap;
+        key.useFlatShading = nm->flatShading;
+    }
+    if (auto* mc = dynamic_cast<MeshMatcapMaterial*>(item.material)) {
+        key.useMap = !!mc->map;
+        key.useAlphaMap = !!mc->alphaMap;
+        key.useNormalMap = !!mc->normalMap;
+        key.useBumpMap = !!mc->bumpMap;
+        key.useDisplacementMap = !!mc->displacementMap;
+        key.useFlatShading = mc->flatShading;
+    }
+    if (auto* tm = dynamic_cast<MeshToonMaterial*>(item.material)) {
+        key.useMap = !!tm->map;
+        key.useAlphaMap = !!tm->alphaMap;
+        key.useNormalMap = !!tm->normalMap;
+        key.useBumpMap = !!tm->bumpMap;
+        key.useDisplacementMap = !!tm->displacementMap;
+        key.useAOMap = !!tm->aoMap;
+        key.useLightMap = !!tm->lightMap;
+        key.useEmissiveMap = !!tm->emissiveMap;
+        key.useFlatShading = tm->flatShading;
+    }
 
     if (env_enabled("THREECPP_FORCE_NO_TEXTURES")) {
         key.useMap = false;
@@ -832,14 +1013,8 @@ GLProgram& GLRenderer::getProgram(const RenderItem& item, Scene& scene) {
         key.usePMREM = false;
     }
 
-    // Stability fallback for the v6.0 regression phase:
-    // The full PBR/physical fragment path is still under active repair on macOS
-    // Core GL.  When it produces an invisible frame, we still want examples and
-    // import validation to render visible geometry/textures.  This fallback keeps
-    // the normal mesh vertex path, UVs, vertex colors, alpha/map defines, groups,
-    // instancing and draw ranges, but uses the robust MeshBasic fragment path.
-    // The repaired Standard/Physical safe PBR path is enabled by default.
-    // Set THREECPP_DISABLE_EXPERIMENTAL_PBR=1 to force the legacy MeshBasic fallback.
+    // Stability fallback for when experimental_pbr_enabled() returns false.
+    // When the full PBR path fails, falls back to MeshBasic.
     const bool experimentalPBR = experimental_pbr_enabled();
     const bool safeMeshFallback = !experimentalPBR &&
         (key.primitiveMode == PrimitiveMode::Triangles) &&
@@ -1058,6 +1233,47 @@ void GLRenderer::setCommonUniforms(GLProgram& p, const RenderItem& item, Scene& 
         gapSize = m->gapSize;
         glUniform1f(p.uniform("linewidth"), m->linewidth);
         glUniform2f(p.uniform("resolution"), static_cast<float>(params.width), static_cast<float>(params.height));
+    } else if (auto* nm = dynamic_cast<MeshNormalMaterial*>(item.material)) {
+        normalScale = nm->normalScale;
+        bumpScale = nm->bumpScale;
+        displacementScale = nm->displacementScale;
+        displacementBias = nm->displacementBias;
+        if (nm->normalMap) resources.bindTexture2D(nm->normalMap, p.uniform("normalMap"), unit++, true);
+        if (nm->bumpMap) resources.bindTexture2D(nm->bumpMap, p.uniform("bumpMap"), unit++);
+        if (nm->displacementMap) resources.bindTexture2D(nm->displacementMap, p.uniform("displacementMap"), unit++);
+    } else if (auto* mc = dynamic_cast<MeshMatcapMaterial*>(item.material)) {
+        color = mc->color;
+        normalScale = mc->normalScale;
+        bumpScale = mc->bumpScale;
+        displacementScale = mc->displacementScale;
+        displacementBias = mc->displacementBias;
+        if (mc->map) { useUvTransformFrom(mc->map); resources.bindTexture2D(mc->map, p.uniform("map"), unit++); }
+        if (mc->alphaMap) resources.bindTexture2D(mc->alphaMap, p.uniform("alphaMap"), unit++);
+        if (mc->normalMap) resources.bindTexture2D(mc->normalMap, p.uniform("normalMap"), unit++, true);
+        if (mc->bumpMap) resources.bindTexture2D(mc->bumpMap, p.uniform("bumpMap"), unit++);
+        if (mc->displacementMap) resources.bindTexture2D(mc->displacementMap, p.uniform("displacementMap"), unit++);
+        if (mc->matcap) resources.bindTexture2D(mc->matcap, p.uniform("matcap"), unit++);
+    } else if (auto* tm = dynamic_cast<MeshToonMaterial*>(item.material)) {
+        color = tm->color;
+        emissive = tm->emissive * tm->emissiveIntensity;
+        normalScale = tm->normalScale;
+        bumpScale = tm->bumpScale;
+        displacementScale = tm->displacementScale;
+        displacementBias = tm->displacementBias;
+        lightMapIntensity = tm->lightMapIntensity;
+        aoMapIntensity = tm->aoMapIntensity;
+        specularColor = tm->specularColor;
+        specularIntensity = tm->specularIntensity;
+        if (tm->map) { useUvTransformFrom(tm->map); resources.bindTexture2D(tm->map, p.uniform("map"), unit++); }
+        if (tm->alphaMap) resources.bindTexture2D(tm->alphaMap, p.uniform("alphaMap"), unit++);
+        if (tm->normalMap) resources.bindTexture2D(tm->normalMap, p.uniform("normalMap"), unit++, true);
+        if (tm->bumpMap) resources.bindTexture2D(tm->bumpMap, p.uniform("bumpMap"), unit++);
+        if (tm->displacementMap) resources.bindTexture2D(tm->displacementMap, p.uniform("displacementMap"), unit++);
+        if (tm->aoMap) resources.bindTexture2D(tm->aoMap, p.uniform("aoMap"), unit++);
+        if (tm->lightMap) resources.bindTexture2D(tm->lightMap, p.uniform("lightMap"), unit++);
+        if (tm->emissiveMap) resources.bindTexture2D(tm->emissiveMap, p.uniform("emissiveMap"), unit++);
+    } else if (auto* sm = dynamic_cast<ShadowMaterial*>(item.material)) {
+        color = sm->color;
     }
 
     glUniform1f(p.uniform("dashScale"), dashScale);
@@ -1183,13 +1399,11 @@ void GLRenderer::setCommonUniforms(GLProgram& p, const RenderItem& item, Scene& 
     // v6.0.29: minimal, standalone directional shadow binding for safe experimental PBR.
     int pbrDirectionalShadowEnabled = 0;
     const ShadowRenderItem* pbrDirectionalShadow = nullptr;
-    if (env_enabled("THREECPP_ENABLE_PBR_SHADOWS")) {
-        for (const auto& sitem : shadowMap.items) {
-            if (!sitem.isPointShadow && sitem.depthTexture && sitem.light && sitem.light->lightType == LightType::Directional) {
-                pbrDirectionalShadow = &sitem;
-                pbrDirectionalShadowEnabled = 1;
-                break;
-            }
+    for (const auto& sitem : shadowMap.items) {
+        if (!sitem.isPointShadow && sitem.depthTexture && sitem.light && sitem.light->lightType == LightType::Directional) {
+            pbrDirectionalShadow = &sitem;
+            pbrDirectionalShadowEnabled = 1;
+            break;
         }
     }
     glUniform1i(p.uniform("pbrDirectionalShadowEnabled"), pbrDirectionalShadowEnabled);
@@ -1207,13 +1421,11 @@ void GLRenderer::setCommonUniforms(GLProgram& p, const RenderItem& item, Scene& 
     // v6.0.30: minimal standalone SpotLight shadow binding for safe experimental PBR.
     int pbrSpotShadowEnabled = 0;
     const ShadowRenderItem* pbrSpotShadow = nullptr;
-    if (env_enabled("THREECPP_ENABLE_PBR_SHADOWS") && env_enabled("THREECPP_ENABLE_PBR_SPOT_SHADOWS", true)) {
-        for (const auto& sitem : shadowMap.items) {
-            if (!sitem.isPointShadow && sitem.depthTexture && sitem.light && sitem.light->lightType == LightType::Spot) {
-                pbrSpotShadow = &sitem;
-                pbrSpotShadowEnabled = 1;
-                break;
-            }
+    for (const auto& sitem : shadowMap.items) {
+        if (!sitem.isPointShadow && sitem.depthTexture && sitem.light && sitem.light->lightType == LightType::Spot) {
+            pbrSpotShadow = &sitem;
+            pbrSpotShadowEnabled = 1;
+            break;
         }
     }
     glUniform1i(p.uniform("pbrSpotShadowEnabled"), pbrSpotShadowEnabled);
@@ -1234,13 +1446,11 @@ void GLRenderer::setCommonUniforms(GLProgram& p, const RenderItem& item, Scene& 
     // v6.0.32: minimal standalone PointLight cube shadow binding for safe experimental PBR.
     int pbrPointShadowEnabled = 0;
     const ShadowRenderItem* pbrPointShadow = nullptr;
-    if (env_enabled("THREECPP_ENABLE_PBR_SHADOWS") && env_enabled("THREECPP_ENABLE_PBR_POINT_SHADOWS", true)) {
-        for (const auto& sitem : shadowMap.items) {
-            if (sitem.isPointShadow && sitem.depthCubeTexture && sitem.light && sitem.light->lightType == LightType::Point) {
-                pbrPointShadow = &sitem;
-                pbrPointShadowEnabled = 1;
-                break;
-            }
+    for (const auto& sitem : shadowMap.items) {
+        if (sitem.isPointShadow && sitem.depthCubeTexture && sitem.light && sitem.light->lightType == LightType::Point) {
+            pbrPointShadow = &sitem;
+            pbrPointShadowEnabled = 1;
+            break;
         }
     }
     glUniform1i(p.uniform("pbrPointShadowEnabled"), pbrPointShadowEnabled);
@@ -1297,6 +1507,39 @@ void GLRenderer::setCommonUniforms(GLProgram& p, const RenderItem& item, Scene& 
         if (!bm.empty()) glUniformMatrix4fv(p.uniform("boneMatrices[0]"), static_cast<GLsizei>(std::min<std::size_t>(bm.size(), 128)), GL_FALSE, &bm[0][0][0]);
         glUniformMatrix4fv(p.uniform("bindMatrix"), 1, GL_FALSE, &skinned->bindMatrix[0][0]);
         glUniformMatrix4fv(p.uniform("bindMatrixInverse"), 1, GL_FALSE, &skinned->bindMatrixInverse[0][0]);
+    }
+
+    // Clipping planes
+    if (item.material->clippingPlaneCount() > 0) {
+        int n = std::min(item.material->clippingPlaneCount(), 8);
+        glUniform1i(p.uniform("clippingPlaneCount"), n);
+        for (int i = 0; i < n; ++i) {
+            glUniform4fv(p.uniform("clippingPlanes[" + std::to_string(i) + "]"), 1, &item.material->clippingPlanes[i][0]);
+        }
+    }
+
+    // Fog
+    if (scene.fog) {
+        int fogType = 0;
+        glm::vec3 fogColor{0.62f};
+        float fogNear = 0.0f;
+        float fogFar = 0.0f;
+        float fogDensity = 0.0f;
+        if (auto* fog = std::get_if<Fog>(scene.fog.get())) {
+            fogType = 0;
+            fogColor = fog->color;
+            fogNear = fog->near;
+            fogFar = fog->far;
+        } else if (auto* fog = std::get_if<FogExp2>(scene.fog.get())) {
+            fogType = 1;
+            fogColor = fog->color;
+            fogDensity = fog->density;
+        }
+        glUniform1i(p.uniform("fogType"), fogType);
+        glUniform3fv(p.uniform("fogColor"), 1, &fogColor[0]);
+        glUniform1f(p.uniform("fogNear"), fogNear);
+        glUniform1f(p.uniform("fogFar"), fogFar);
+        glUniform1f(p.uniform("fogDensity"), fogDensity);
     }
 }
 

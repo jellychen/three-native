@@ -3,8 +3,24 @@
 #include "ibl/Environment.hpp"
 #include "material/Material.hpp"
 #include <initializer_list>
+#include <variant>
 
 namespace threecpp {
+
+struct Fog {
+    glm::vec3 color{0.62f, 0.62f, 0.62f};
+    float near = 1.0f;
+    float far = 1000.0f;
+    bool isFogExp2 = false;
+};
+
+struct FogExp2 {
+    glm::vec3 color{0.62f, 0.62f, 0.62f};
+    float density = 0.00025f;
+    bool isFogExp2 = true;
+};
+
+using FogVariant = std::variant<Fog, FogExp2>;
 
 struct SceneBackgroundColor {
     glm::vec3 rgb{0.0f};
@@ -42,12 +58,9 @@ public:
     SceneBackgroundColor backgroundColor{};
     std::shared_ptr<Texture> background;
     std::shared_ptr<Environment> environment;
-    // Same semantic as THREE.Scene.overrideMaterial: when set, every renderable
-    // object in the normal scene render uses this material instead of its own
-    // mesh/group material. Geometry groups still split draw calls, but each group
-    // resolves to overrideMaterial.
     std::shared_ptr<Material> overrideMaterial;
     float environmentIntensity = 1.0f;
+    std::shared_ptr<FogVariant> fog;
     Scene() { kind = ObjectKind::Scene; }
 };
 
